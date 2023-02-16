@@ -13,6 +13,22 @@ use surrealdb::{
     Datastore, Session,
 };
 
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #
+    DbError(surrealdb::Error),
+}
+
+async fn run_single_statement(
+    ds: &Datastore,
+    sess: &Session,
+    query: Statement,
+    vars: Option<BTreeMap<String, Value>>,
+) -> Result<Response, Error> {
+    ds.process(Query(Statements(vec![query])), sess, vars, true)
+        .await
+}
+
 #[tokio::main]
 async fn main() {
     let ds = Datastore::new("memory").await.unwrap();

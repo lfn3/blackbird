@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 axum = "0.6"
 surrealdb = {version = "1.0.0-beta.8", features = ["parallel", "kv-mem", "kv-rocksdb"], default_features=false}
+thiserror = "1.0.38"
 tokio = { version = "1.21", features = ["macros", "rt-multi-thread"] }
