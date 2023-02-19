@@ -1,23 +1,16 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::format,
-};
+use std::{collections::BTreeMap, fmt::Display};
 
 use surrealdb::{
     sql::{
         parse,
-        statements::{
-            DefineDatabaseStatement, DefineFieldStatement, DefineNamespaceStatement,
-            DefineStatement, DefineTableStatement, InfoStatement, InsertStatement, SelectStatement,
-        },
-        Data, Field, Fields, Ident, Idiom, Object, Part, Query, Statement, Statements, Table,
-        Value, Values,
+        statements::{DefineFieldStatement, DefineStatement, DefineTableStatement, InfoStatement},
+        Object, Query, Statement, Statements, Value,
     },
     Datastore, Session,
 };
 
 #[derive(thiserror::Error, Debug)]
-enum Error {
+pub enum Error {
     #[error("{0}")]
     DbError(surrealdb::Error),
 
@@ -37,7 +30,7 @@ impl From<surrealdb::Error> for Error {
     }
 }
 
-async fn run_single_statement(
+pub async fn run_single_statement(
     ds: &Datastore,
     sess: &Session,
     query: Statement,
@@ -58,7 +51,7 @@ async fn run_single_statement(
     }
 }
 
-async fn run_statements(
+pub async fn run_statements(
     ds: &Datastore,
     sess: &Session,
     queries: Vec<Statement>,
@@ -76,10 +69,21 @@ async fn run_statements(
 }
 
 #[derive(Debug)]
-struct TableSchema {
+pub struct TableSchema {
     name: String,
     definition: DefineTableStatement,
     fields: Vec<DefineFieldStatement>,
+}
+
+impl Display for TableSchema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{};\n", self.definition,))?;
+        for field in &self.fields {
+            f.write_fmt(format_args!("{field};\n"))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl TableSchema {
@@ -146,7 +150,7 @@ fn parse_to_define_statement(val: &Value) -> Result<DefineStatement, Error> {
     }
 }
 
-async fn get_schemas(ds: &Datastore, sess: &Session) -> Result<Vec<TableSchema>, Error> {
+pub async fn get_schemas(ds: &Datastore, sess: &Session) -> Result<Vec<TableSchema>, Error> {
     let tables = run_single_statement(&ds, &sess, Statement::Info(InfoStatement::Db), None).await?;
 
     let mut schemas = match tables {
@@ -223,81 +227,4 @@ fn extract_define_field_from_val(val: &Value) -> Result<DefineFieldStatement, Er
     };
 
     Ok(define_statement)
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    let ds = Datastore::new("memory").await.unwrap();
-
-    let namespace = "test_namespace";
-
-    let define_ns_statement =
-        Statement::Define(DefineStatement::Namespace(DefineNamespaceStatement {
-            name: namespace.into(),
-        }));
-
-    run_single_statement(&ds, &Session::for_kv(), define_ns_statement, None).await?;
-
-    let database = "test_database";
-
-    let define_db_statement =
-        Statement::Define(DefineStatement::Database(DefineDatabaseStatement {
-            name: database.into(),
-        }));
-
-    run_single_statement(&ds, &Session::for_ns(namespace), define_db_statement, None).await?;
-
-    let sess = Session::for_db(namespace, database);
-
-    let table_name = "person";
-
-    let define_table_statements = vec![
-        Statement::Define(DefineStatement::Table(DefineTableStatement {
-            name: table_name.into(),
-            full: true,
-            ..DefineTableStatement::default()
-        })),
-        Statement::Define(DefineStatement::Field(DefineFieldStatement {
-            name: Idiom(vec![Part::Field("name".into())]),
-            what: table_name.into(),
-            kind: Some(surrealdb::sql::Kind::String),
-            ..DefineFieldStatement::default()
-        })),
-    ];
-
-    run_statements(
-        &ds,
-        &Session::for_db(namespace, database),
-        define_table_statements,
-        None,
-    )
-    .await
-    .into_iter()
-    .collect::<Result<Vec<_>, _>>()?;
-
-    let mut obj = BTreeMap::new();
-    obj.insert("name".to_string(), Value::Strand("bob".into()));
-
-    let insert_person = Query(Statements(vec![Statement::Insert(InsertStatement {
-        into: table_name.into(),
-        data: Data::SingleExpression(Value::Object(Object(obj))),
-        ..InsertStatement::default()
-    })]));
-
-    ds.process(insert_person, &sess, None, true).await?;
-
-    // let select_statement = Statement::Select(SelectStatement {
-    //     expr: Fields(vec![Field::All]),
-    //     what: Values(vec![Value::Table(Table("person".to_string()))]),
-    //     ..Default::default()
-    // });
-
-    // let select_res = run_single_statement(&ds, &sess, select_statement, None).await?;
-    // println!("resp: {:#?}", select_res);
-
-    let info_res = get_schemas(&ds, &sess).await?;
-
-    println!("schemas: {:#?}", info_res);
-
-    Ok(())
 }
