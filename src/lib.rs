@@ -1,9 +1,17 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::BTreeMap,
+    fmt::Display,
+    fs::{self},
+    path::{Path, PathBuf},
+};
 
 use surrealdb::{
     sql::{
         parse,
-        statements::{DefineFieldStatement, DefineStatement, DefineTableStatement, InfoStatement},
+        statements::{
+            DefineDatabaseStatement, DefineFieldStatement, DefineNamespaceStatement,
+            DefineStatement, DefineTableStatement, InfoStatement,
+        },
         Object, Query, Statement, Statements, Value,
     },
     Datastore, Session,
@@ -12,7 +20,7 @@ use surrealdb::{
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("{0}")]
-    DbError(surrealdb::Error),
+    DbError(#[from] surrealdb::Error),
 
     #[error("Expected {0} rows, got {1}")]
     UnexpectedResultCount(usize, usize),
@@ -22,11 +30,36 @@ pub enum Error {
 
     #[error("Object is missing expected key: {0}")]
     MissingExpectedKey(String),
+
+    #[error("IO error: {context}")]
+    IOError {
+        context: String,
+        source: std::io::Error,
+    },
 }
 
-impl From<surrealdb::Error> for Error {
-    fn from(value: surrealdb::Error) -> Self {
-        return Error::DbError(value);
+// Cribbed from anyhow, and slightly modified to line up with our error above, and be less generic
+trait Context<T, E> {
+    fn context(self, context: String) -> Result<T, Error>;
+
+    fn with_context<F>(self, f: F) -> Result<T, Error>
+    where
+        F: FnOnce() -> String;
+}
+
+impl<T> Context<T, std::io::Error> for std::io::Result<T> {
+    fn context(self, context: String) -> Result<T, Error> {
+        return self.map_err(|source| Error::IOError { context, source });
+    }
+
+    fn with_context<F>(self, f: F) -> Result<T, Error>
+    where
+        F: FnOnce() -> String,
+    {
+        return self.map_err(|source| Error::IOError {
+            context: f(),
+            source,
+        });
     }
 }
 
@@ -227,4 +260,124 @@ fn extract_define_field_from_val(val: &Value) -> Result<DefineFieldStatement, Er
     };
 
     Ok(define_statement)
+}
+
+const IN_MEM_NAMESPACE: &str = "test_namespace";
+const IN_MEM_DATABASE: &str = "test_database";
+
+pub async fn in_mem_database() -> Result<(Datastore, Session), Error> {
+    let ds = Datastore::new("memory").await?;
+
+    let define_ns_statement =
+        Statement::Define(DefineStatement::Namespace(DefineNamespaceStatement {
+            name: IN_MEM_NAMESPACE.into(),
+        }));
+
+    run_single_statement(&ds, &Session::for_kv(), define_ns_statement, None).await?;
+
+    let define_db_statement =
+        Statement::Define(DefineStatement::Database(DefineDatabaseStatement {
+            name: IN_MEM_DATABASE.into(),
+        }));
+
+    run_single_statement(
+        &ds,
+        &Session::for_ns(IN_MEM_NAMESPACE),
+        define_db_statement,
+        None,
+    )
+    .await?;
+
+    return Ok((ds, Session::for_db(IN_MEM_NAMESPACE, IN_MEM_DATABASE)));
+}
+
+pub async fn apply_migrations_to_in_mem_db(
+    migrations: Vec<Statement>,
+) -> Result<(Datastore, Session), Error> {
+    let (ds, sess) = in_mem_database().await?;
+
+    run_statements(&ds, &sess, migrations, None)
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok((ds, sess))
+}
+
+pub async fn get_schemas_from_migrations(
+    migrations: Vec<Statement>,
+) -> Result<Vec<TableSchema>, Error> {
+    let (ds, sess) = apply_migrations_to_in_mem_db(migrations).await?;
+
+    get_schemas(&ds, &sess).await
+}
+
+fn get_migration_files<P>(directory: P) -> Result<Vec<PathBuf>, Error>
+where
+    P: AsRef<Path>,
+{
+    let path = directory.as_ref();
+    let mut entries = Vec::default();
+    for f in fs::read_dir(path)
+        .with_context(|| format!("could not read files in {}", path.to_string_lossy()))?
+    {
+        let path = f
+            .with_context(|| format!("could not read files in {}", path.to_string_lossy()))?
+            .path();
+
+        if path.extension().map(|s| s == "sql").unwrap_or_default() {
+            entries.push(path);
+        }
+    }
+
+    entries.sort_unstable();
+
+    Ok(entries)
+}
+
+// TODO: make a "migration" struct that wraps a set of statements, and has an optional path so we can point to the source of errors
+pub fn read_migrations<P>(directory: P) -> Result<Vec<Statement>, Error>
+where
+    P: AsRef<Path>,
+{
+    let mut migrations = Vec::default();
+
+    for f in get_migration_files(directory)? {
+        let sql_str = fs::read_to_string(f.as_path())
+            .with_context(|| format!("could not read file {}", f.to_string_lossy()))?;
+        let parsed_ast = parse(&sql_str)?;
+        migrations.extend(parsed_ast.0 .0);
+    }
+
+    Ok(migrations)
+}
+
+#[cfg(test)]
+mod tests {
+    use insta::assert_snapshot;
+
+    use crate::{get_migration_files, get_schemas_from_migrations, read_migrations};
+
+    #[test]
+    fn test_get_migration_files() {
+        let files = get_migration_files("./examples/migrations").unwrap();
+
+        assert_eq!(files.len(), 2);
+        assert!(files[0].to_string_lossy().ends_with("1_create_table.sql"));
+        assert!(files[1].to_string_lossy().ends_with("2_drop_col.sql"));
+    }
+
+    #[tokio::test]
+    async fn test_get_schemas_from_migrations() {
+        let migs = read_migrations("./examples/migrations").unwrap();
+        let schemas = get_schemas_from_migrations(migs).await.unwrap();
+
+        let schema_str = schemas
+            .into_iter()
+            .map(|ts| ts.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_snapshot!(schema_str)
+    }
 }

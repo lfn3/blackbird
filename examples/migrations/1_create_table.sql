@@ -1,0 +1,3 @@
+DEFINE TABLE person SCHEMAFULL;
+DEFINE FIELD name ON person TYPE string;
+DEFINE FIELD age ON person TYPE int;

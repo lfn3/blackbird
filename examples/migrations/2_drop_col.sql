@@ -1,0 +1,1 @@
+REMOVE FIELD age ON person;
