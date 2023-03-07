@@ -101,11 +101,11 @@ pub async fn run_statements(
     resp.into_iter().map(|r| r.result).collect()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TableSchema {
-    name: String,
-    definition: DefineTableStatement,
-    fields: Vec<DefineFieldStatement>,
+    pub name: String,
+    pub definition: DefineTableStatement,
+    pub fields: Vec<DefineFieldStatement>,
 }
 
 impl Display for TableSchema {

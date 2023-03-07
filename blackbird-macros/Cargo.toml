@@ -1,0 +1,19 @@
+[package]
+name = "blackbird-macros"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+once_cell = {workspace = true}
+syn = {workspace = true}
+quote = {workspace = true}
+proc-macro2 = {workspace = true}
+
+surrealdb = {workspace = true}
+
+tokio = {workspace = true}
+
+blackbird-core = {path = "../blackbird-core"}
