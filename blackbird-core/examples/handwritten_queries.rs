@@ -15,7 +15,7 @@ use surrealdb::{
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let ds = Datastore::new("memory").await.unwrap();
+    let ds = Datastore::new("memory").await?;
 
     let namespace = "test_namespace";
 

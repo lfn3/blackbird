@@ -203,6 +203,8 @@ dependencies = [
 name = "blackbird"
 version = "0.1.0"
 dependencies = [
+ "blackbird-core",
+ "blackbird-macros",
  "insta",
  "surrealdb",
  "thiserror",

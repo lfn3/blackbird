@@ -6,6 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+blackbird-core = {path = "../blackbird-core"}
+blackbird-macros = {path = "../blackbird-macros"}
+
 surrealdb = {workspace = true}
 thiserror = {workspace = true}
 tokio = {workspace = true}

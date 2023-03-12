@@ -267,28 +267,8 @@ const IN_MEM_DATABASE: &str = "test_database";
 
 pub async fn in_mem_database() -> Result<(Datastore, Session), Error> {
     let ds = Datastore::new("memory").await?;
-
-    let define_ns_statement =
-        Statement::Define(DefineStatement::Namespace(DefineNamespaceStatement {
-            name: IN_MEM_NAMESPACE.into(),
-        }));
-
-    run_single_statement(&ds, &Session::for_kv(), define_ns_statement, None).await?;
-
-    let define_db_statement =
-        Statement::Define(DefineStatement::Database(DefineDatabaseStatement {
-            name: IN_MEM_DATABASE.into(),
-        }));
-
-    run_single_statement(
-        &ds,
-        &Session::for_ns(IN_MEM_NAMESPACE),
-        define_db_statement,
-        None,
-    )
-    .await?;
-
-    return Ok((ds, Session::for_db(IN_MEM_NAMESPACE, IN_MEM_DATABASE)));
+    let sess = create_db_and_ns(&ds, IN_MEM_NAMESPACE, IN_MEM_DATABASE).await?;
+    return Ok((ds, sess));
 }
 
 pub async fn apply_migrations_to_in_mem_db(
@@ -350,6 +330,34 @@ where
     }
 
     Ok(migrations)
+}
+
+pub async fn create_db_and_ns(
+    datastore: &Datastore,
+    namespace: &str,
+    database: &str,
+) -> Result<Session, Error> {
+    let define_ns_statement =
+        Statement::Define(DefineStatement::Namespace(DefineNamespaceStatement {
+            name: namespace.into(),
+        }));
+
+    run_single_statement(datastore, &Session::for_kv(), define_ns_statement, None).await?;
+
+    let define_db_statement =
+        Statement::Define(DefineStatement::Database(DefineDatabaseStatement {
+            name: database.into(),
+        }));
+
+    run_single_statement(
+        datastore,
+        &Session::for_ns(namespace),
+        define_db_statement,
+        None,
+    )
+    .await?;
+
+    Ok(Session::for_db(namespace, database))
 }
 
 #[cfg(test)]
