@@ -1,6 +1,5 @@
 ---
-source: src/lib.rs
-assertion_line: 381
+source: blackbird-core/src/lib.rs
 expression: schema_str
 ---
 DEFINE TABLE person SCHEMAFULL;

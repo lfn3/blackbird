@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_get_migration_files() {
-        let files = get_migration_files("./examples/migrations").unwrap();
+        let files = get_migration_files("../blackbird/examples/migrations").unwrap();
 
         assert_eq!(files.len(), 2);
         assert!(files[0].to_string_lossy().ends_with("1_create_table.sql"));
@@ -369,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_schemas_from_migrations() {
-        let migs = read_migrations("./examples/migrations").unwrap();
+        let migs = read_migrations("../blackbird/examples/migrations").unwrap();
         let schemas = get_schemas_from_migrations(migs).await.unwrap();
 
         let schema_str = schemas
