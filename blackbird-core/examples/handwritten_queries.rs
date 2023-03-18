@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use blackbird_core::{get_schemas, run_single_statement, run_statements, Error};
+use blackbird_core::{run_single_statement, run_statements, schema::get_schemas, Error};
 use surrealdb::{
     sql::{
         statements::{

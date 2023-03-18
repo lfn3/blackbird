@@ -9,7 +9,11 @@ use std::{
 };
 use surrealdb::sql::Kind;
 
-use blackbird_core::{get_schemas_from_migrations, read_migrations, Error, TableSchema};
+use blackbird_core::{
+    read_migrations,
+    schema::{get_schemas_from_migrations, TableSchema},
+    Error,
+};
 use once_cell::unsync::Lazy;
 use syn::{parse::Parse, parse_macro_input, Ident, LitStr, Token, Type};
 
