@@ -25,3 +25,4 @@ Given the migrations in the [example dir](https://github.com/lfn3/blackbird/tree
 - [ ] Make `struct_for!` accept a const str as a migration path
 - [ ] How should we handle the special `id` column?
 - [ ] What impls should we generate on our structs?
+- [x] Prototype nullabilty handling
