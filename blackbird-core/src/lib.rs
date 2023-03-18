@@ -197,8 +197,11 @@ mod tests {
     fn test_get_migration_files() {
         let files = get_migration_files("../blackbird/examples/migrations").unwrap();
 
-        assert_eq!(files.len(), 2);
+        assert_eq!(files.len(), 3);
         assert!(files[0].to_string_lossy().ends_with("1_create_table.sql"));
         assert!(files[1].to_string_lossy().ends_with("2_drop_col.sql"));
+        assert!(files[1]
+            .to_string_lossy()
+            .ends_with("3_add_not_null_col.sql"));
     }
 }

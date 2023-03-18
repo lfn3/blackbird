@@ -4,7 +4,7 @@ use surrealdb::{
     sql::{
         parse,
         statements::{DefineFieldStatement, DefineStatement, DefineTableStatement, InfoStatement},
-        Object, Statement, Value,
+        Object, Operator, Statement, Value,
     },
     Datastore, Session,
 };
@@ -84,6 +84,10 @@ fn parse_to_define_statement(val: &Value) -> Result<DefineStatement, Error> {
         .next()
         .ok_or_else(|| Error::UnexpectedResultCount(1, 0))?;
 
+    extract_define_statement(statement)
+}
+
+fn extract_define_statement(statement: Statement) -> Result<DefineStatement, Error> {
     match statement {
         Statement::Define(s) => Ok(s),
         t => Err(Error::UnexpectedType(
@@ -143,7 +147,8 @@ fn set_table_schema(
     let fields = match fields {
         Value::Object(o) => o
             .iter()
-            .map(|(_, v)| extract_define_field_from_val(v))
+            .map(|(_, v)| parse_to_define_statement(v))
+            .map(|s| s.and_then(extract_define_field_from_define))
             .collect::<Result<Vec<_>, _>>(),
         t => {
             return Err(Error::UnexpectedType(
@@ -158,18 +163,32 @@ fn set_table_schema(
     Ok(())
 }
 
-fn extract_define_field_from_val(val: &Value) -> Result<DefineFieldStatement, Error> {
-    let define_statement = match parse_to_define_statement(val)? {
-        DefineStatement::Field(s) => s,
-        t => {
-            return Err(Error::UnexpectedType(
-                "DefineStatement::Field".to_string(),
-                format!("{:?}", t),
-            ))
-        }
-    };
+fn extract_define_field_from_define(
+    statement: DefineStatement,
+) -> Result<DefineFieldStatement, Error> {
+    match statement {
+        DefineStatement::Field(s) => Ok(s),
+        t => Err(Error::UnexpectedType(
+            "DefineStatement::Field".to_string(),
+            format!("{:?}", t),
+        )),
+    }
+}
 
-    Ok(define_statement)
+pub fn is_nullable(field: &DefineFieldStatement) -> bool {
+    // TODO: this won't detect anything aside from `ASSERT $value != NONE;`.
+    //       Probably need to build a recursive parser that only follows `and`s?
+
+    if let Some(assert) = field.assert.as_ref() {
+        match assert {
+            Value::Expression(e) => {
+                return e.o != Operator::NotEqual || (!e.l.is_none() && !e.r.is_none())
+            }
+            _ => return true,
+        }
+    }
+
+    true
 }
 
 pub async fn get_schemas_from_migrations(
@@ -183,9 +202,13 @@ pub async fn get_schemas_from_migrations(
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
+    use surrealdb::sql::parse;
 
-    use super::get_schemas_from_migrations;
-    use crate::read_migrations;
+    use super::{
+        extract_define_field_from_define, extract_define_statement, get_schemas_from_migrations,
+        is_nullable,
+    };
+    use crate::{read_migrations, Error};
 
     #[tokio::test]
     async fn test_get_schemas_from_migrations() {
@@ -199,5 +222,29 @@ mod tests {
             .join("\n");
 
         assert_snapshot!(schema_str)
+    }
+
+    #[test]
+    fn test_is_nullable_non_nullable_field() -> Result<(), Error> {
+        let statement = r#"DEFINE FIELD name ON person TYPE string ASSERT $value != NONE;"#;
+        let parsed_statement = parse(&statement)?.0 .0[0].clone();
+        let fdef = extract_define_statement(parsed_statement)
+            .and_then(extract_define_field_from_define)?;
+
+        assert!(!is_nullable(&fdef));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_nullable_nullable_field() -> Result<(), Error> {
+        let statement = r#"DEFINE FIELD name ON person TYPE string"#;
+        let parsed_statement = parse(&statement)?.0 .0[0].clone();
+        let fdef = extract_define_statement(parsed_statement)
+            .and_then(extract_define_field_from_define)?;
+
+        assert!(is_nullable(&fdef));
+
+        Ok(())
     }
 }

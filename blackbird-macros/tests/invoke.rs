@@ -5,8 +5,9 @@ struct_for!(Person, "./blackbird/examples/migrations");
 #[test]
 fn test_can_use_struct() {
     let p = Person {
-        name: "john".to_string(),
+        name: Some("john".to_string()),
+        username: "big_j".to_string(),
     };
 
-    assert_eq!(p.name, "john");
+    assert_eq!(p.name.unwrap(), "john");
 }

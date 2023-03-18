@@ -12,9 +12,12 @@ const TABLE_NAME: &str = "person";
 impl From<&Person> for BTreeMap<String, Value> {
     fn from(value: &Person) -> Self {
         let mut output = BTreeMap::new();
+        if let Some(name) = value.name.as_ref() {
+            output.insert("name".to_string(), Value::Strand(name.as_str().into()));
+        }
         output.insert(
-            "name".to_string(),
-            Value::Strand(value.name.as_str().into()),
+            "username".to_string(),
+            Value::Strand(value.username.as_str().into()),
         );
 
         output
@@ -37,7 +40,8 @@ async fn main() -> Result<(), Error> {
     let (ds, sess) = apply_migrations_to_in_mem_db(migrations).await?;
 
     let p = Person {
-        name: "bob".to_string(),
+        name: Some("bob".to_string()),
+        username: "b0b".to_string(),
     };
 
     let insert_val = run_single_statement(&ds, &sess, p.insert_statement(), None).await?;

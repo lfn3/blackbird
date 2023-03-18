@@ -1,0 +1,8 @@
+---
+source: blackbird-core/src/schema.rs
+expression: schema_str
+---
+DEFINE TABLE person SCHEMAFULL;
+DEFINE FIELD name ON person TYPE string;
+DEFINE FIELD username ON person TYPE string ASSERT $value != NONE;
+

@@ -1,0 +1,1 @@
+DEFINE FIELD username ON person TYPE string ASSERT $value != NONE;

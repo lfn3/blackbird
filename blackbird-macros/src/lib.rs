@@ -11,7 +11,7 @@ use surrealdb::sql::Kind;
 
 use blackbird_core::{
     read_migrations,
-    schema::{get_schemas_from_migrations, TableSchema},
+    schema::{get_schemas_from_migrations, is_nullable, TableSchema},
     Error,
 };
 use once_cell::unsync::Lazy;
@@ -95,7 +95,7 @@ impl Parse for StructForTable {
     }
 }
 
-fn struct_field_for(field_name: &str, kind: Kind) -> TokenStream {
+fn struct_field_for(field_name: &str, kind: Kind, nullable: bool) -> TokenStream {
     let typ: Type = match kind {
         Kind::Bool => Type::Verbatim(quote!(bool)),
         Kind::Datetime => todo!(),
@@ -113,6 +113,12 @@ fn struct_field_for(field_name: &str, kind: Kind) -> TokenStream {
         Kind::Any => todo!(),
         Kind::Array => todo!(),
     };
+
+    let typ = if nullable {
+        Type::Verbatim(quote!(Option<#typ>))
+    } else {
+        typ
+    };
     let field_name = Ident::new(field_name, Span::call_site());
 
     quote! {
@@ -128,8 +134,13 @@ pub fn struct_for(input: TokenStream) -> TokenStream {
     let mut fields = Vec::with_capacity(schema.fields.len());
 
     for s in schema.fields {
+        let nullable = is_nullable(&s);
         if let Some(kind) = s.kind {
-            fields.push(struct_field_for(s.name.to_string().as_str(), kind));
+            fields.push(struct_field_for(
+                s.name.to_string().as_str(),
+                kind,
+                nullable,
+            ));
         } else {
             // TODO: compile error instead
             panic!(
